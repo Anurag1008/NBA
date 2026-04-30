@@ -1,0 +1,29 @@
+# Root gitignore (monorepo)
+
+## OS / editor
+.DS_Store
+.idea/
+*.iml
+.vscode/
+
+## Node
+**/node_modules/
+**/dist/
+**/dist-ssr/
+**/.vite/
+**/.eslintcache
+
+## Java / Maven
+**/target/
+**/.classpath
+**/.project
+**/.settings/
+
+## Logs
+*.log
+
+## Env / secrets
+.env
+.env.*
+!.env.example
+
