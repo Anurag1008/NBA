@@ -22,6 +22,7 @@ public class Programs {
   private Long id;
   @Column(nullable = false)
   private String name;
+  private String code;
   @Column(nullable = false)
   private String level;
   @Column(nullable = false)

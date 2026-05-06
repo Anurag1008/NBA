@@ -1,0 +1,757 @@
+# NBA Accreditation Portal — Project Documentation
+
+> National Board of Accreditation (NBA) portal for Indian educational institutions to manage the accreditation process — tracking institutes, departments, programs, faculty, and NBA file assignments.
+
+---
+
+## Table of Contents
+
+1. [Project Overview](#1-project-overview)
+2. [Tech Stack](#2-tech-stack)
+3. [Project Structure](#3-project-structure)
+4. [Frontend Architecture](#4-frontend-architecture)
+5. [Backend Architecture](#5-backend-architecture)
+6. [Database Schema](#6-database-schema)
+7. [Authentication & Security](#7-authentication--security)
+8. [API Reference](#8-api-reference)
+9. [Frontend File Reference](#9-frontend-file-reference)
+10. [Backend File Reference](#10-backend-file-reference)
+11. [Running the Project](#11-running-the-project)
+
+---
+
+## 1. Project Overview
+
+The NBA portal allows educational institutes to manage the NBA accreditation lifecycle:
+
+- Admins create and manage institutes, departments, and programs
+- Faculty are assigned NBA documentation files
+- Admins monitor portal-wide stats (institutes, departments, users)
+- Faculty see their own task/file assignment stats on the dashboard
+
+**User Roles**
+
+| Role | Description |
+|------|-------------|
+| `ROLE_ADMIN` | Full access — manage institutes, departments, programs, users |
+| `ROLE_PRINCIPAL` | Institute principal (defined, not yet fully implemented) |
+| `ROLE_HOD` | Head of Department |
+| `ROLE_NBA_COORDINATOR` | NBA Coordinator at institute level |
+| `ROLE_NBA_COORDINATOR_DEPT` | NBA Coordinator at department level |
+| `ROLE_FACULTY` | Faculty member — views assigned files and tasks |
+
+---
+
+## 2. Tech Stack
+
+### Frontend
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| React | 19 | UI framework |
+| TypeScript | ~5.8 | Type safety |
+| Vite | 7 | Build tool / dev server |
+| Tailwind CSS | 3 | Utility-first styling |
+| MUI (Material UI) | 7 | Component library |
+| MUI X DataGrid | 9 | Data tables |
+| React Router | 7 | Client-side routing |
+| Axios | 1.11 | HTTP client |
+| jwt-decode | 4 | Decode JWT tokens client-side |
+| react-icons | 5 | Icon library |
+
+### Backend
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| Spring Boot | Latest | Application framework |
+| Spring Security | Latest | Authentication & authorization |
+| Spring Data JPA | Latest | ORM / database layer |
+| PostgreSQL | Latest | Relational database |
+| JWT (jjwt) | Latest | Stateless auth tokens |
+| Lombok | Latest | Boilerplate reduction |
+
+---
+
+## 3. Project Structure
+
+```
+NBA/
+├── frontend/                  # React + Vite frontend
+│   ├── src/
+│   │   ├── api/               # Axios instances
+│   │   ├── components/        # All page & UI components
+│   │   │   └── cards/         # Reusable card components
+│   │   ├── context/           # React context (Auth)
+│   │   ├── hooks/             # Custom React hooks
+│   │   ├── App.tsx            # Route definitions
+│   │   └── main.tsx           # App entry point
+│   ├── package.json
+│   └── vite.config.ts
+│
+├── backend/                   # Spring Boot backend
+│   └── src/main/java/com/portal/backend/
+│       ├── config/            # App config, data seeder
+│       ├── controller/        # REST controllers
+│       ├── dto/               # Data transfer objects
+│       ├── entity/            # JPA entities
+│       ├── ErrorHandling/     # Error response models
+│       ├── exception/         # Custom exceptions
+│       ├── payload/
+│       │   ├── request/       # Request body classes
+│       │   └── response/      # Response body classes
+│       ├── repository/        # Spring Data JPA repositories
+│       ├── security/          # JWT, filters, Web Security config
+│       │   ├── jwt/           # JWT utilities & filter
+│       │   └── services/      # UserDetails implementations
+│       └── service/           # Business logic services
+│
+└── Project_documentation.md
+```
+
+---
+
+## 4. Frontend Architecture
+
+### Routing (`App.tsx`)
+
+```
+/login                          → Login (public)
+/unauthorized                   → Unauthorized page (public)
+
+[Authenticated — ADMIN + FACULTY]
+  /                             → redirects to /dashboard
+  /dashboard                    → Dashboard
+  /tasks                        → Tasks (file assignments)
+  /profile                      → User profile
+
+[Admin only]
+  /institute                    → Institutes grid
+  /users                        → User management
+  /create-institute             → 3-step institute wizard
+  /create-departments/:id       → Create departments (standalone)
+  /create-program               → Create programs (standalone)
+```
+
+### Auth Flow
+
+```
+Login → POST /api/v1/auth/signin
+      ← { accessToken }  +  HttpOnly cookie: refreshToken
+
+All private requests → Authorization: Bearer <accessToken>
+
+Token expired (403) → GET /api/v1/auth/refreshtoken (uses cookie)
+                    ← { accessToken }  → retry original request
+
+Logout → POST /api/v1/auth/signout → deletes refresh token in DB
+       → clears local auth state → redirect /login
+```
+
+### State Management
+
+- **Auth state** is held in `AuthProvider` context (email, roles, accessToken)
+- No global store (Redux/Zustand) — component-level state + context
+- `useAxiosPrivate` automatically attaches the Bearer token and handles 403 token refresh
+
+### Key Components
+
+| Component | Route | Role Access |
+|-----------|-------|-------------|
+| `Login` | `/login` | Public |
+| `Dashboard` | `/dashboard` | All |
+| `Institute` | `/institute` | Admin |
+| `Users` | `/users` | Admin |
+| `InstituteWizard` | `/create-institute` | Admin |
+| `Tasks` | `/tasks` | All |
+| `Profile` | `/profile` | All |
+| `Sidebar` | Layout | All |
+| `Home` | Layout shell | All |
+
+---
+
+## 5. Backend Architecture
+
+### Server Config
+- **Port:** `8085`
+- **Context path:** `/api/v1`
+- **Full base URL:** `http://localhost:8085/api/v1`
+
+### Package Structure
+
+```
+com.portal.backend/
+├── controller/          REST API endpoints
+├── entity/              JPA-mapped database tables
+├── payload/
+│   ├── request/         @RequestBody classes
+│   └── response/        Response record/classes
+├── repository/          Spring Data interfaces
+├── security/
+│   ├── jwt/             AuthTokenFilter, JwtUtils, AuthEntryPointJwt
+│   └── services/        UserDetailsImpl, UserDetailsServiceImpl, RefreshTokenService
+├── config/              AppConfig, DataSeeder
+├── exception/           TokenRefreshException
+└── service/             UserService
+```
+
+### Security Filter Chain (request processing order)
+
+```
+Request
+  → CORS filter (WebSecurityConfig.corsConfigurationSource)
+  → AuthTokenFilter (parse JWT → set SecurityContext)
+  → URL authorization rules
+  → Controller method
+  → @PreAuthorize (method-level role check)
+```
+
+### CORS Configuration
+- Allowed origin: `http://localhost:5173`
+- Allowed methods: GET, POST, PUT, DELETE
+- Credentials: allowed
+- Headers: all
+
+---
+
+## 6. Database Schema
+
+### Tables
+
+#### `institute`
+| Column | Type | Notes |
+|--------|------|-------|
+| id | BIGINT PK | Auto-generated |
+| name | VARCHAR | Unique, not null |
+| code | VARCHAR | Unique |
+| address_line1 | VARCHAR | |
+| address_line2 | VARCHAR | |
+| city | VARCHAR | |
+| state | VARCHAR | |
+| country | VARCHAR | |
+| pincode | VARCHAR | |
+| is_active | BOOLEAN | Default true |
+| created_at | TIMESTAMP | Auto-set |
+
+#### `department`
+| Column | Type | Notes |
+|--------|------|-------|
+| id | BIGINT PK | Auto-generated |
+| name | VARCHAR | Not null |
+| code | VARCHAR | |
+| is_active | BOOLEAN | Default true |
+| institute_id | FK → institute | |
+
+#### `programs`
+| Column | Type | Notes |
+|--------|------|-------|
+| id | BIGINT PK | Auto-generated |
+| name | VARCHAR | Not null |
+| level | VARCHAR | e.g. UG, PG |
+| is_active | BOOLEAN | Default true |
+| department_id | FK → department | |
+| institute_id | FK → institute | |
+
+#### `users`
+| Column | Type | Notes |
+|--------|------|-------|
+| id | BIGINT PK | Auto-generated |
+| username | VARCHAR(20) | Unique |
+| email | VARCHAR(50) | Unique, not null |
+| password | VARCHAR | BCrypt encoded |
+| institute_id | FK → institute | |
+| department_id | FK → department | |
+| program_id | FK → programs | |
+
+#### `roles`
+| Column | Type | Notes |
+|--------|------|-------|
+| id | BIGINT PK | |
+| name | ENUM | ROLE_ADMIN, ROLE_FACULTY, etc. |
+
+#### `user_roles` (join table)
+| Column | Type |
+|--------|------|
+| user_id | FK → users |
+| role_id | FK → roles |
+
+#### `refresh_token`
+| Column | Type | Notes |
+|--------|------|-------|
+| id | BIGINT PK | |
+| token | VARCHAR | UUID |
+| expiry_date | TIMESTAMP | |
+| user_id | FK → users | |
+
+#### `nba_file`
+| Column | Type | Notes |
+|--------|------|-------|
+| id | BIGINT PK | |
+| code | VARCHAR | Not null |
+| title | VARCHAR | Not null |
+| description | VARCHAR | |
+| is_active | BOOLEAN | Not null |
+| file_link | VARCHAR | Not null |
+| program_id | FK → programs | |
+| institute_id | FK → institute | |
+| department_id | FK → department | |
+
+#### `nba_file_assignment`
+| Column | Type | Notes |
+|--------|------|-------|
+| id | BIGINT PK | |
+| assigned_by | BIGINT | User ID of assigner |
+| assigned_at | TIME | |
+| due_date | DATE | |
+| status | VARCHAR | PENDING / COMPLETED / OVERDUE |
+| user_id | FK → users | Faculty assigned to |
+| nba_file_id | FK → nba_file | |
+
+#### `user_info`
+| Column | Type | Notes |
+|--------|------|-------|
+| id | BIGINT PK | |
+| first_name | VARCHAR | |
+| date_of_birth | DATE | |
+| date_of_joining | DATE | |
+| designation | VARCHAR | |
+| emp_code | VARCHAR | |
+| phone | VARCHAR | |
+| user_id | FK → users | |
+
+---
+
+## 7. Authentication & Security
+
+### JWT Configuration
+| Property | Value |
+|----------|-------|
+| Access token expiry | 1 hour (3,600,000 ms) |
+| Refresh token expiry | 24 hours (86,400,000 ms) |
+| Refresh token storage | HttpOnly cookie (`refreshToken`) |
+| Cookie SameSite | Lax |
+| Cookie Secure | false (dev) |
+
+### JWT Token Payload
+```json
+{
+  "email": "user@example.com",
+  "id": 1,
+  "roles": ["ROLE_FACULTY"]
+}
+```
+
+### URL-Level Security Rules
+| Pattern | Rule |
+|---------|------|
+| `/auth/**`, `/error` | permitAll |
+| `/admin/**` | hasRole(ADMIN) |
+| `/api/faculty/**` | hasRole(FACULTY) (note: path mismatch — use @PreAuthorize) |
+| `anyRequest` | authenticated |
+
+> Note: Method-level `@PreAuthorize` is enabled via `@EnableMethodSecurity` and provides the primary role enforcement.
+
+---
+
+## 8. API Reference
+
+**Base URL:** `http://localhost:8085/api/v1`
+
+All authenticated endpoints require: `Authorization: Bearer <accessToken>`
+
+---
+
+### Auth — `/auth`
+
+#### `POST /auth/signin`
+Sign in and get access token.
+
+**Request**
+```json
+{ "email": "admin@example.com", "password": "password" }
+```
+**Response** `200`
+```json
+{ "accessToken": "<jwt>" }
+```
+Sets HttpOnly cookie: `refreshToken=<uuid>`
+
+---
+
+#### `POST /auth/signup`
+Create a single user. **Admin only.**
+
+**Request**
+```json
+{
+  "username": "john",
+  "email": "john@example.com",
+  "password": "Password@123",
+  "role": ["faculty"]
+}
+```
+**Response** `200` `{ "message": "User registered successfully!" }`
+
+---
+
+#### `POST /auth/create-Multiple-Users`
+Create multiple faculty users with default password. **Admin only.**
+
+**Request**
+```json
+{ "user_email": ["a@x.com", "b@x.com"] }
+```
+**Response** `200` `{ "message": "Users registered successfully!" }`
+
+---
+
+#### `POST /auth/update-user-role`
+Update role(s) of an existing user. **Admin only.**
+
+**Request**
+```json
+{ "email": "user@x.com", "roles": ["hod"] }
+```
+Role values: `admin`, `principle`, `hod`, `faculty`
+
+**Response** `200` `{ "message": "Users role updated successfully!" }`
+
+---
+
+#### `GET /auth/refreshtoken`
+Refresh access token using the HttpOnly cookie.
+
+**Response** `200`
+```json
+{ "accessToken": "<new_jwt>" }
+```
+Rotates the refresh token cookie.
+
+---
+
+#### `POST /auth/signout`
+Logout — deletes refresh token from DB. **Authenticated.**
+
+**Response** `200` `{ "message": "Log out successful!" }`
+
+---
+
+#### `GET /auth/users`
+*(Legacy — prefer `/admin/users`)* List all users. **Admin only.**
+
+---
+
+### Admin — `/admin`
+
+All endpoints require `ROLE_ADMIN`.
+
+#### `GET /admin/stats`
+Returns portal-wide counts.
+
+**Response** `200`
+```json
+{ "institutes": 5, "departments": 12, "users": 48 }
+```
+
+---
+
+#### `GET /admin/users`
+List all registered users with their roles.
+
+**Response** `200`
+```json
+[
+  { "id": 1, "username": "john", "email": "john@x.com", "roles": ["ROLE_FACULTY"] }
+]
+```
+
+---
+
+#### `POST /admin/create-users`
+Create one or more users with specified roles and default password `Default@123`.
+
+**Request**
+```json
+{
+  "users": [
+    { "email": "alice@x.com", "role": "ROLE_FACULTY" },
+    { "email": "bob@x.com",   "role": "ROLE_HOD" }
+  ]
+}
+```
+**Role values:** `ROLE_ADMIN`, `ROLE_PRINCIPAL`, `ROLE_HOD`, `ROLE_NBA_COORDINATOR`, `ROLE_NBA_COORDINATOR_DEPT`, `ROLE_FACULTY`
+
+**Response** `200` `{ "message": "Users registered successfully!" }`
+**Response** `400` `{ "message": "Error: Email alice@x.com is already in use!" }`
+
+---
+
+### Institute — `/institute`
+
+All endpoints require `ROLE_ADMIN`.
+
+#### `GET /institute/show-institute`
+Fetch all institutes with their departments.
+
+**Response** `200` — array of `Institute` objects (includes `departmentList`)
+
+---
+
+#### `POST /institute/create-institute`
+Create a new institute.
+
+**Request**
+```json
+{
+  "name": "ABC Engineering College",
+  "code": "ABC",
+  "addressLine1": "123 Main St",
+  "addressLine2": "",
+  "city": "Pune",
+  "state": "Maharashtra",
+  "country": "India",
+  "pincode": "411001"
+}
+```
+**Response** `200` `{ "id": 1 }`
+**Response** `400` if name or code already exists.
+
+---
+
+### Department — `/department`
+
+#### `POST /department/create-departments`
+Create one or more departments under an institute. **Admin only.**
+
+**Request**
+```json
+{
+  "instituteId": 1,
+  "createDepartments": [
+    { "code": "CS", "name": "Computer Science" },
+    { "code": "EC", "name": "Electronics" }
+  ]
+}
+```
+**Response** `200`
+```json
+{ "instituteId": 1, "departmentName": ["Computer Science", "Electronics"] }
+```
+
+---
+
+### Program — `/program`
+
+#### `POST /program/create-programs`
+Create one or more programs under a department. **Admin only.**
+
+**Request**
+```json
+{
+  "instituteId": 1,
+  "departmentName": "Computer Science",
+  "programs": [
+    { "name": "B.Tech CSE", "level": "UG" },
+    { "name": "M.Tech CSE", "level": "PG" }
+  ]
+}
+```
+**Response** `200` `{ "message": "Program created successfully" }`
+
+---
+
+### Faculty — `/faculty`
+
+#### `GET /faculty/my-stats`
+Get file assignment stats for the currently logged-in user. **Authenticated (any role).**
+
+**Response** `200`
+```json
+{
+  "total": 10,
+  "pending": 4,
+  "completed": 5,
+  "overdue": 1
+}
+```
+
+#### `POST /faculty/update-faculty-details`
+Update profile details for the logged-in faculty. **Requires `ROLE_FACULTY`.**
+
+**Request**
+```json
+{
+  "firstName": "John",
+  "date_of_birth": "1990-01-15",
+  "date_of_joining": "2018-07-01",
+  "designation": "Assistant Professor",
+  "emp_code": "EMP001",
+  "phone": "9876543210"
+}
+```
+**Response** `200` `"User details updated successfully!"`
+
+---
+
+## 9. Frontend File Reference
+
+### `src/api/`
+| File | Purpose |
+|------|---------|
+| `axios.tsx` | Two Axios instances: default (public, no credentials) and `axiosPrivate` (with `Authorization` header + `withCredentials: true`) |
+
+### `src/context/`
+| File | Purpose |
+|------|---------|
+| `AuthProvider.tsx` | React context holding `{ auth, setAuth }`. `auth` shape: `{ email, roles[], accessToken }` |
+
+### `src/hooks/`
+| File | Purpose |
+|------|---------|
+| `useAuth.ts` | Consumes `AuthContext` |
+| `useAxiosPrivate.tsx` | Attaches Bearer token to requests; intercepts 403 to auto-refresh token |
+| `useRefreshToken.tsx` | Calls `GET /auth/refreshtoken`, updates auth context with new token |
+
+### `src/components/`
+| File | Route | Description |
+|------|-------|-------------|
+| `Login.tsx` | `/login` | Email + password login form |
+| `Home.tsx` | `/` | Layout shell — renders `<Sidebar>` + `<Outlet>` |
+| `Sidebar.tsx` | layout | Collapsible left nav; shows nav items filtered by role; handles logout (calls signout API) |
+| `Dashboard.tsx` | `/dashboard` | Admin: portal stats + institutes table. Faculty: file assignment stats (total/pending/completed/overdue) |
+| `Institute.tsx` | `/institute` | Searchable card grid of all institutes (admin only) |
+| `InstituteWizard.tsx` | `/create-institute` | 3-step form wizard: Step 1 Create Institute → Step 2 Add Departments → Step 3 Add Programs |
+| `CreateDepartments.tsx` | `/create-departments/:id` | Standalone department creation for a given institute |
+| `CreateProgram.tsx` | `/create-program` | Standalone program creation |
+| `Users.tsx` | `/users` | Admin user list with searchable DataGrid + "Create Users" dialog (email + role per row) |
+| `Tasks.tsx` | `/tasks` | Faculty file assignments list with filter chips (All / Pending / Completed / Overdue) — API not yet implemented |
+| `Profile.tsx` | `/profile` | Displays logged-in user's email and roles |
+| `Unauthorized.tsx` | `/unauthorized` | Shown when a user accesses a route they don't have permission for |
+| `RequiredAuth.tsx` | — | Route guard HOC — checks auth roles, redirects to `/login` or `/unauthorized` |
+| `PersistLogin.tsx` | — | Attempts token refresh on page reload to restore session |
+| `types.tsx` | — | Shared TypeScript interfaces (`Institute`, etc.) |
+
+### `src/components/cards/`
+| File | Purpose |
+|------|---------|
+| `InstituteCard.tsx` | Card UI for a single institute |
+| `DepartmentCard.tsx` | Card UI for a department |
+| `ProgramCard.tsx` | Card UI for a program |
+
+---
+
+## 10. Backend File Reference
+
+### Controllers
+| File | Base Path | Description |
+|------|-----------|-------------|
+| `AuthController.java` | `/auth` | Signin, signup, refresh token, signout, update user role, create multiple users |
+| `AdminStatsController.java` | `/admin` | Portal stats, list users, create users with role |
+| `InstituteController.java` | `/institute` | Create and list institutes |
+| `DepartmentController.java` | `/department` | Create departments under an institute |
+| `ProgramController.java` | `/program` | Create programs under a department |
+| `FacultyController.java` | `/faculty` | My file assignment stats, update faculty profile details |
+| `FileController.java` | — | Placeholder (not yet implemented) |
+| `NBACoordinatorController.java` | — | Placeholder (not yet implemented) |
+| `InitializeProgramFilesController.java` | — | Placeholder (not yet implemented) |
+
+### Entities
+| File | Table | Key Relations |
+|------|-------|---------------|
+| `Institute.java` | `institute` | Has many `Department`, `AcadmicYear` |
+| `Department.java` | `department` | Belongs to `Institute`; has many `Programs` |
+| `Programs.java` | `programs` | Belongs to `Department` and `Institute`; has many `NbaFile`, `Users` |
+| `Users.java` | `users` | Many-to-many `Roles` (EAGER); has many `NbaFileAssignment`, `Qualification`; one `UserInfo` |
+| `Roles.java` | `roles` | Enum: ROLE_ADMIN, ROLE_PRINCIPAL, ROLE_NBA_COORDINATOR, ROLE_HOD, ROLE_NBA_COORDINATOR_DEPT, ROLE_FACULTY |
+| `NbaFile.java` | `nba_file` | Belongs to `Programs`, `Institute`, `Department`; has many `NbaFileAssignment` |
+| `NbaFileAssignment.java` | `nba_file_assignment` | Belongs to `Users` and `NbaFile`; status: PENDING / COMPLETED / OVERDUE |
+| `UserInfo.java` | `user_info` | One-to-one with `Users`; stores firstName, DOB, designation, empCode, phone |
+| `RefreshToken.java` | `refresh_token` | UUID token linked to `Users` |
+| `AcadmicYear.java` | `acadmic_year` | Linked to `Institute` |
+| `CommonFiles.java` | `common_files` | Common NBA files |
+| `Qualification.java` | `qualification` | Faculty qualification linked to `Users` |
+| `ERole.java` | — | Enum of all roles |
+
+### Repositories
+| File | Entity | Notable Methods |
+|------|--------|-----------------|
+| `UserRepository` | `Users` | `findByEmail`, `existsByEmail`, `existsByUsername` |
+| `InstituteRepository` | `Institute` | `existsByName`, `existsByCode` |
+| `DepartmentRepository` | `Department` | `findByInstituteId` |
+| `ProgramRepository` | `Programs` | — |
+| `RoleRepository` | `Roles` | `findByName(ERole)` |
+| `RefreshTokenRepository` | `RefreshToken` | `findByToken`, `deleteByUser` |
+| `UserInfoRepository` | `UserInfo` | `findByUsers` |
+| `NbaFileAssignmentRepository` | `NbaFileAssignment` | `countByUsersEmail`, `countByUsersEmailAndStatus` |
+
+### Security
+| File | Purpose |
+|------|---------|
+| `WebSecurityConfig.java` | Security filter chain, CORS config, URL authorization rules |
+| `AuthTokenFilter.java` | Parses JWT from `Authorization` header, sets `SecurityContextHolder` |
+| `JwtUtils.java` | Generate, validate, and parse JWT tokens |
+| `AuthEntryPointJwt.java` | Returns 401 JSON response for unauthenticated requests |
+| `UserDetailsImpl.java` | Spring Security `UserDetails` wrapper around `Users` entity |
+| `UserDetailsServiceImpl.java` | Loads `UserDetailsImpl` by email for Spring Security |
+| `RefreshTokenService.java` | Create, verify expiry, and delete refresh tokens in DB |
+
+### Payload
+| File | Used By | Fields |
+|------|---------|--------|
+| `LoginRequest` | `POST /auth/signin` | `email`, `password` |
+| `SignupRequest` | `POST /auth/signup` | `username`, `email`, `password`, `role` |
+| `CreateMultipleUserRequest` | `POST /auth/create-Multiple-Users` | `user_email: List<String>` |
+| `AdminCreateUsersRequest` | `POST /admin/create-users` | `users: List<{email, role}>` |
+| `UpdateUserRole` | `POST /auth/update-user-role` | `email`, `roles: Set<String>` |
+| `CreateInstituteRequest` | `POST /institute/create-institute` | `name`, `code`, address fields |
+| `CreateDepartmentRequest` | `POST /department/create-departments` | `instituteId`, `createDepartments: [{code, name}]` |
+| `CreateProgramRequest` | `POST /program/create-programs` | `instituteId`, `departmentName`, `programs: [{name, level}]` |
+| `AddUserDetailRequest` | `POST /faculty/update-faculty-details` | `firstName`, `date_of_birth`, `date_of_joining`, `designation`, `emp_code`, `phone` |
+| `JwtResponse` | `POST /auth/signin` response | `accessToken` |
+| `TokenRefreshResponse` | `GET /auth/refreshtoken` response | `accessToken` |
+| `AdminStatsResponse` | `GET /admin/stats` response | `institutes`, `departments`, `users` |
+| `MessageResponse` | Generic success/error | `message` |
+| `InstituteCreatedResponse` | `POST /institute/create-institute` response | `id` |
+| `DepartmentCreatedResponse` | `POST /department/create-departments` response | `instituteId`, `departmentName` |
+
+---
+
+## 11. Running the Project
+
+### Prerequisites
+- Java 17+
+- Node.js 20.19+ (or 22.12+)
+- PostgreSQL running on port 5432
+- Database named `NBA` created
+
+### Backend
+
+```bash
+# From /backend directory
+./mvnw spring-boot:run
+# Starts on http://localhost:8085
+```
+
+**Database setup:** Spring JPA with `ddl-auto=update` auto-creates/updates tables on startup. Roles are seeded via `DataSeeder.java` on first run.
+
+### Frontend
+
+```bash
+# From /frontend directory
+npm install
+npm run dev
+# Starts on http://localhost:5173
+```
+
+### Default Credentials
+
+Users created via `POST /admin/create-users` get default password: **`Default@123`**
+
+Users created via `POST /auth/signup` use the password provided in the request.
+
+---
+
+## Notes & Known Issues
+
+- `FileController`, `NBACoordinatorController`, `InitializeProgramFilesController` are stubs — not yet implemented.
+- `Tasks.tsx` frontend uses a placeholder timeout; the backend task endpoints are not yet implemented.
+- The security config has some URL matchers with incorrect paths (e.g. `/api/faculty/**`) — these are non-functional; rely on `@PreAuthorize` for role enforcement.
+- `@CrossOrigin(origins = "*")` on `AuthController` conflicts with `withCredentials: true` — admin/management endpoints have been moved to `/admin/**` to avoid this issue.
+- Node.js 20.17 is below Vite's minimum (20.19) — upgrade recommended.

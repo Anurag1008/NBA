@@ -1,10 +1,14 @@
 package com.portal.backend.controller;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -12,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.portal.backend.entity.UserInfo;
 import com.portal.backend.payload.request.AddUserDetailRequest;
+import com.portal.backend.repository.NbaFileAssignmentRepository;
 import com.portal.backend.repository.UserInfoRepository;
 import com.portal.backend.repository.UserRepository;
 import com.portal.backend.security.services.UserDetailsImpl;
@@ -29,6 +34,22 @@ public class FacultyController {
 
     @Autowired
     UserRepository userRepository;
+
+    @Autowired
+    NbaFileAssignmentRepository assignmentRepository;
+
+    @GetMapping("/my-stats")
+    public ResponseEntity<Map<String, Long>> myStats() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        String email = ((UserDetailsImpl) auth.getPrincipal()).getEmail();
+
+        Map<String, Long> stats = new LinkedHashMap<>();
+        stats.put("total",     assignmentRepository.countByUsersEmail(email));
+        stats.put("pending",   assignmentRepository.countByUsersEmailAndStatus(email, "PENDING"));
+        stats.put("completed", assignmentRepository.countByUsersEmailAndStatus(email, "COMPLETED"));
+        stats.put("overdue",   assignmentRepository.countByUsersEmailAndStatus(email, "OVERDUE"));
+        return ResponseEntity.ok(stats);
+    }
 
     @PreAuthorize("hasRole('FACULTY')")
     @PostMapping("/update-faculty-details") 

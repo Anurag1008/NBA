@@ -12,6 +12,7 @@ public class CreateProgramRequest {
     @Data
     public static  class CreateProgram {
         public String name;
+        public String code;
         public String level;
     }
 }

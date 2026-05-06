@@ -36,7 +36,8 @@ public class Users {
   private Long id;
 
   @NotBlank
-  @Size(max = 20)
+  @Size(max = 50)
+  @Column(length = 50)
   private String username;
 
   @NotBlank
