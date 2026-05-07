@@ -3,8 +3,8 @@ import useAxiosPrivate from "../hooks/useAxiosPrivate";
 import useAuth from "../hooks/useAuth";
 import type { Institute } from "./types";
 import { DataGrid, type GridColDef } from "@mui/x-data-grid";
-import { Card, CardContent, TextField, Typography, Skeleton } from "@mui/material";
-import { MdSchool, MdApartment, MdPeople, MdAdd, MdArrowForward, MdAssignment, MdCheckCircle, MdHourglassEmpty, MdPending, MdUploadFile, MdErrorOutline, MdInfoOutline } from "react-icons/md";
+import { Card, CardContent, TextField, Typography, Skeleton, Button } from "@mui/material";
+import { MdSchool, MdApartment, MdPeople, MdAdd, MdArrowForward, MdAssignment, MdCheckCircle, MdHourglassEmpty, MdPending, MdUploadFile, MdErrorOutline, MdInfoOutline, MdCalendarToday, MdTrendingUp, MdGroupAdd } from "react-icons/md";
 import { useNavigate } from "react-router-dom";
 
 const INSTITUTES_URL = "/institute/show-institute";
@@ -52,6 +52,155 @@ const StatCard = ({ label, value, icon, color, isLoading = false, onClick }: Sta
                 )}
             </CardContent>
         </Card>
+    );
+};
+
+type AdminStatCardProps = {
+    label: string;
+    value: number;
+    icon: React.ReactNode;
+    gradient: string;
+    iconBg: string;
+    iconColor: string;
+    subtitle?: string;
+    isLoading?: boolean;
+    onClick?: () => void;
+};
+
+const AdminStatCard = ({
+    label,
+    value,
+    icon,
+    gradient,
+    iconBg,
+    iconColor,
+    subtitle,
+    isLoading = false,
+    onClick,
+}: AdminStatCardProps) => {
+    const interactive = !!onClick;
+    return (
+        <button
+            onClick={onClick}
+            disabled={!interactive}
+            className={`group relative overflow-hidden rounded-2xl bg-white border border-slate-100 shadow-sm p-5 text-left transition-all duration-300 ${
+                interactive
+                    ? "hover:shadow-lg hover:-translate-y-0.5 hover:border-slate-200 cursor-pointer"
+                    : "cursor-default"
+            }`}
+        >
+            {/* Decorative gradient blob */}
+            <div
+                className={`pointer-events-none absolute -top-10 -right-10 w-36 h-36 rounded-full opacity-40 blur-2xl ${gradient}`}
+            />
+
+            <div className="relative flex items-start justify-between">
+                <div className="flex-1 min-w-0">
+                    <Typography
+                        variant="caption"
+                        className="font-semibold text-slate-500 uppercase tracking-wider text-[11px]"
+                    >
+                        {label}
+                    </Typography>
+                    {isLoading ? (
+                        <Skeleton width={100} height={48} className="mt-2" />
+                    ) : (
+                        <Typography
+                            variant="h3"
+                            className="font-bold text-slate-900 mt-1 leading-tight"
+                            sx={{ fontSize: "2.25rem" }}
+                        >
+                            {value.toLocaleString()}
+                        </Typography>
+                    )}
+                    {subtitle && !isLoading && (
+                        <div className="flex items-center gap-1 mt-1.5 text-xs text-slate-500">
+                            <MdTrendingUp size={14} className="text-emerald-500" />
+                            <span>{subtitle}</span>
+                        </div>
+                    )}
+                </div>
+                <div
+                    className={`w-12 h-12 rounded-xl flex items-center justify-center ${iconBg} ${iconColor} shadow-sm shrink-0 group-hover:scale-110 transition-transform duration-300`}
+                >
+                    {icon}
+                </div>
+            </div>
+
+            {interactive && (
+                <div className="relative mt-4 flex items-center gap-1 text-xs font-semibold text-slate-400 group-hover:text-slate-700 transition-colors">
+                    <span>View all</span>
+                    <MdArrowForward
+                        size={14}
+                        className="transition-transform duration-300 group-hover:translate-x-1"
+                    />
+                </div>
+            )}
+        </button>
+    );
+};
+
+type QuickActionAccent = "blue" | "emerald" | "violet";
+
+const QUICK_ACTION_STYLES: Record<
+    QuickActionAccent,
+    { hoverBorder: string; iconBg: string; iconText: string; arrow: string; bgGlow: string }
+> = {
+    blue: {
+        hoverBorder: "hover:border-blue-200",
+        iconBg: "bg-gradient-to-br from-blue-500 to-blue-600",
+        iconText: "text-white",
+        arrow: "group-hover:text-blue-500",
+        bgGlow: "bg-blue-200",
+    },
+    emerald: {
+        hoverBorder: "hover:border-emerald-200",
+        iconBg: "bg-gradient-to-br from-emerald-500 to-emerald-600",
+        iconText: "text-white",
+        arrow: "group-hover:text-emerald-500",
+        bgGlow: "bg-emerald-200",
+    },
+    violet: {
+        hoverBorder: "hover:border-violet-200",
+        iconBg: "bg-gradient-to-br from-violet-500 to-violet-600",
+        iconText: "text-white",
+        arrow: "group-hover:text-violet-500",
+        bgGlow: "bg-violet-200",
+    },
+};
+
+type QuickActionCardProps = {
+    title: string;
+    description: string;
+    icon: React.ReactNode;
+    accent: QuickActionAccent;
+    onClick: () => void;
+};
+
+const QuickActionCard = ({ title, description, icon, accent, onClick }: QuickActionCardProps) => {
+    const s = QUICK_ACTION_STYLES[accent];
+    return (
+        <button
+            onClick={onClick}
+            className={`group relative overflow-hidden text-left flex items-center gap-4 bg-white border border-slate-100 ${s.hoverBorder} rounded-2xl p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200`}
+        >
+            <div
+                className={`pointer-events-none absolute -bottom-12 -right-8 w-32 h-32 rounded-full opacity-0 group-hover:opacity-30 blur-2xl transition-opacity ${s.bgGlow}`}
+            />
+            <div
+                className={`relative w-12 h-12 ${s.iconBg} ${s.iconText} rounded-xl flex items-center justify-center shadow-sm shrink-0 group-hover:scale-110 transition-transform duration-300`}
+            >
+                {icon}
+            </div>
+            <div className="relative flex-1 min-w-0">
+                <p className="font-bold text-slate-900 text-sm truncate">{title}</p>
+                <p className="text-slate-500 text-xs mt-0.5 line-clamp-2">{description}</p>
+            </div>
+            <MdArrowForward
+                size={18}
+                className={`relative text-slate-300 ${s.arrow} transition-all duration-200 group-hover:translate-x-1`}
+            />
+        </button>
     );
 };
 
@@ -259,9 +408,16 @@ export const Dashboard = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const hour = new Date().getHours();
+    const now = new Date();
+    const hour = now.getHours();
     const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
     const userName = auth?.email?.split("@")[0] ?? "there";
+    const todayLabel = now.toLocaleDateString(undefined, {
+        weekday: "long",
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+    });
 
     useEffect(() => {
         let cancelled = false;
@@ -359,14 +515,85 @@ export const Dashboard = () => {
     return (
         <div className="w-full space-y-6">
             {/* Welcome banner */}
-            <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-xl p-6 text-white shadow-md">
-                <p className="text-blue-100 text-sm font-medium mb-1">{greeting},</p>
-                <h1 className="text-2xl font-bold capitalize mb-1">{userName}</h1>
-                <p className="text-blue-200 text-sm">
-                    {isAdmin
-                        ? "You have full admin access to the NBA portal."
-                        : "Welcome to the NBA accreditation portal."}
-                </p>
+            <div className="relative overflow-hidden rounded-2xl shadow-lg">
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-700" />
+                {/* decorative blobs */}
+                <div className="absolute inset-0 opacity-40 pointer-events-none">
+                    <div className="absolute -top-16 -right-10 w-72 h-72 rounded-full bg-white/10 blur-3xl" />
+                    <div className="absolute -bottom-24 left-20 w-80 h-80 rounded-full bg-cyan-300/20 blur-3xl" />
+                </div>
+                {/* subtle dot grid */}
+                <div
+                    className="absolute inset-0 opacity-[0.07]"
+                    style={{
+                        backgroundImage:
+                            "radial-gradient(circle, white 1px, transparent 1px)",
+                        backgroundSize: "20px 20px",
+                    }}
+                />
+
+                <div className="relative px-6 sm:px-10 py-8 flex flex-col md:flex-row md:items-center gap-6 text-white">
+                    <div className="flex-1 min-w-0">
+                        {isAdmin && (
+                            <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-white/15 backdrop-blur-sm border border-white/20 mb-3">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-pulse" />
+                                Admin
+                            </span>
+                        )}
+                        <p className="text-blue-100 text-sm font-medium">{greeting},</p>
+                        <h1 className="text-3xl sm:text-4xl font-bold capitalize tracking-tight mt-0.5">
+                            {userName}
+                        </h1>
+                        <p className="text-blue-100/90 text-sm mt-2 max-w-xl">
+                            {isAdmin
+                                ? "Manage institutes, departments, programs, and users from a single command center."
+                                : "Welcome to the NBA accreditation portal."}
+                        </p>
+                        <div className="flex items-center gap-2 mt-3 text-xs text-blue-100/80">
+                            <MdCalendarToday size={14} />
+                            <span>{todayLabel}</span>
+                        </div>
+                    </div>
+
+                    {isAdmin && (
+                        <div className="flex flex-wrap gap-2 md:flex-col md:items-end shrink-0">
+                            <Button
+                                variant="contained"
+                                startIcon={<MdAdd size={18} />}
+                                onClick={() => navigate("/create-institute")}
+                                sx={{
+                                    borderRadius: "0.75rem",
+                                    textTransform: "none",
+                                    fontWeight: 600,
+                                    backgroundColor: "white",
+                                    color: "#4338ca",
+                                    boxShadow: "none",
+                                    "&:hover": { backgroundColor: "#f8fafc", boxShadow: "none" },
+                                }}
+                            >
+                                New Institute
+                            </Button>
+                            <Button
+                                variant="outlined"
+                                startIcon={<MdGroupAdd size={18} />}
+                                onClick={() => navigate("/users")}
+                                sx={{
+                                    borderRadius: "0.75rem",
+                                    textTransform: "none",
+                                    fontWeight: 600,
+                                    color: "white",
+                                    borderColor: "rgba(255,255,255,0.5)",
+                                    "&:hover": {
+                                        borderColor: "white",
+                                        backgroundColor: "rgba(255,255,255,0.1)",
+                                    },
+                                }}
+                            >
+                                Manage Users
+                            </Button>
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* File assignment stats — faculty only */}
@@ -404,67 +631,84 @@ export const Dashboard = () => {
             {/* Stats — admin only */}
             {isAdmin && (
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <StatCard
+                    <AdminStatCard
                         label="Total Institutes"
                         value={stats.institutes}
-                        icon={<MdSchool size={20} className="text-blue-600" />}
-                        color="bg-blue-50"
+                        icon={<MdSchool size={22} />}
+                        gradient="bg-blue-300"
+                        iconBg="bg-gradient-to-br from-blue-500 to-blue-600"
+                        iconColor="text-white"
+                        subtitle="Active institutions"
                         isLoading={loading}
                         onClick={() => navigate("/institute")}
                     />
-                    <StatCard
+                    <AdminStatCard
                         label="Total Departments"
                         value={stats.departments}
-                        icon={<MdApartment size={20} className="text-indigo-600" />}
-                        color="bg-indigo-50"
+                        icon={<MdApartment size={22} />}
+                        gradient="bg-indigo-300"
+                        iconBg="bg-gradient-to-br from-indigo-500 to-indigo-600"
+                        iconColor="text-white"
+                        subtitle="Across all institutes"
                         isLoading={loading}
                     />
-                    <StatCard
+                    <AdminStatCard
                         label="Total Users"
                         value={stats.users}
-                        icon={<MdPeople size={20} className="text-violet-600" />}
-                        color="bg-violet-50"
+                        icon={<MdPeople size={22} />}
+                        gradient="bg-violet-300"
+                        iconBg="bg-gradient-to-br from-violet-500 to-violet-600"
+                        iconColor="text-white"
+                        subtitle="Registered members"
                         isLoading={loading}
+                        onClick={() => navigate("/users")}
                     />
                 </div>
             )}
 
             {/* Quick actions — admin only */}
             {isAdmin && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <button
-                        onClick={() => navigate("/create-institute")}
-                        className="group flex items-center gap-4 bg-white border border-slate-100 hover:border-blue-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-all duration-200 text-left"
-                    >
-                        <div className="w-10 h-10 bg-blue-50 group-hover:bg-blue-600 rounded-lg flex items-center justify-center transition-colors duration-200">
-                            <MdAdd size={20} className="text-blue-600 group-hover:text-white transition-colors duration-200" />
-                        </div>
-                        <div className="flex-1">
-                            <p className="font-semibold text-slate-800 text-sm">Create Institute</p>
-                            <p className="text-slate-500 text-xs mt-0.5">Add a new institution with departments & programs</p>
-                        </div>
-                        <MdArrowForward size={18} className="text-slate-300 group-hover:text-blue-500 transition-colors duration-200" />
-                    </button>
-
-                    <button
-                        onClick={() => navigate("/institute")}
-                        className="group flex items-center gap-4 bg-white border border-slate-100 hover:border-emerald-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-all duration-200 text-left"
-                    >
-                        <div className="w-10 h-10 bg-emerald-50 group-hover:bg-emerald-600 rounded-lg flex items-center justify-center transition-colors duration-200">
-                            <MdSchool size={20} className="text-emerald-600 group-hover:text-white transition-colors duration-200" />
-                        </div>
-                        <div className="flex-1">
-                            <p className="font-semibold text-slate-800 text-sm">View Institutes</p>
-                            <p className="text-slate-500 text-xs mt-0.5">Browse and manage all registered institutions</p>
-                        </div>
-                        <MdArrowForward size={18} className="text-slate-300 group-hover:text-emerald-500 transition-colors duration-200" />
-                    </button>
+                <div>
+                    <div className="flex items-center justify-between mb-3">
+                        <Typography variant="overline" className="font-bold text-slate-500 tracking-wider">
+                            Quick Actions
+                        </Typography>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <QuickActionCard
+                            title="Create Institute"
+                            description="Add a new institution with departments & programs"
+                            icon={<MdAdd size={22} />}
+                            accent="blue"
+                            onClick={() => navigate("/create-institute")}
+                        />
+                        <QuickActionCard
+                            title="View Institutes"
+                            description="Browse and manage all registered institutions"
+                            icon={<MdSchool size={22} />}
+                            accent="emerald"
+                            onClick={() => navigate("/institute")}
+                        />
+                        <QuickActionCard
+                            title="Manage Users"
+                            description="Create users and update their roles"
+                            icon={<MdPeople size={22} />}
+                            accent="violet"
+                            onClick={() => navigate("/users")}
+                        />
+                    </div>
                 </div>
             )}
 
             {/* Core catalog uploads — admin only */}
             {isAdmin && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div>
+                    <div className="flex items-center justify-between mb-3">
+                        <Typography variant="overline" className="font-bold text-slate-500 tracking-wider">
+                            Catalog Uploads
+                        </Typography>
+                    </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     <CoreUploadCard
                         title="Upload Core Departments"
                         description={
@@ -494,16 +738,31 @@ export const Dashboard = () => {
                         accent="emerald"
                         nameField="programName"
                     />
+                    </div>
                 </div>
             )}
 
             {/* Institutes table */}
-            <Card className="rounded-xl shadow-sm border border-slate-100 bg-white">
+            <Card className="rounded-2xl shadow-sm border border-slate-100 bg-white">
                 <CardContent className="p-6">
                     <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-5">
-                        <Typography variant="h6" className="font-bold text-slate-900 flex-1">
-                            Institutes Directory
-                        </Typography>
+                        <div className="flex items-center gap-3 flex-1">
+                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-sm">
+                                <MdSchool size={20} className="text-white" />
+                            </div>
+                            <div>
+                                <Typography variant="h6" className="font-bold text-slate-900 leading-tight">
+                                    Institutes Directory
+                                </Typography>
+                                <Typography variant="caption" className="text-slate-500">
+                                    {loading ? (
+                                        <Skeleton width={120} />
+                                    ) : (
+                                        `${institutes.length} institute${institutes.length !== 1 ? "s" : ""} registered`
+                                    )}
+                                </Typography>
+                            </div>
+                        </div>
                         <TextField
                             size="small"
                             placeholder="Search institutes…"
@@ -512,6 +771,20 @@ export const Dashboard = () => {
                             className="sm:w-72"
                             sx={{ "& .MuiOutlinedInput-root": { borderRadius: "0.5rem" } }}
                         />
+                        {isAdmin && (
+                            <Button
+                                variant="text"
+                                endIcon={<MdArrowForward size={16} />}
+                                onClick={() => navigate("/institute")}
+                                sx={{
+                                    borderRadius: "0.5rem",
+                                    textTransform: "none",
+                                    fontWeight: 600,
+                                }}
+                            >
+                                View all
+                            </Button>
+                        )}
                     </div>
 
                     {error && (

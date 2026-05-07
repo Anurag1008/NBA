@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { CircularProgress, Typography } from "@mui/material";
+import { Button, CircularProgress, Tooltip, Typography } from "@mui/material";
 import {
     MdArrowBack,
     MdDownload,
@@ -9,40 +9,39 @@ import {
     MdDomain,
     MdEmail,
     MdBadge,
+    MdEdit,
 } from "react-icons/md";
 import useAxiosPrivate from "../hooks/useAxiosPrivate";
+import useAuth from "../hooks/useAuth";
 import type { ProgramDetail as ProgramDetailType, ProgramUser } from "./types";
+import { EditRoleDialog } from "./EditRoleDialog";
 
 export const ProgramDetail = () => {
     const { programId } = useParams<{ programId: string }>();
     const navigate = useNavigate();
     const axiosPrivate = useAxiosPrivate();
+    const { auth } = useAuth();
+    const isAdmin = auth?.roles?.includes("ROLE_ADMIN") ?? false;
+    const currentEmail = auth?.email?.toLowerCase() ?? "";
 
     const [data, setData] = useState<ProgramDetailType | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [editingUser, setEditingUser] = useState<ProgramUser | null>(null);
+
+    const fetchProgram = () => {
+        if (!programId) return;
+        setLoading(true);
+        setError(null);
+        axiosPrivate
+            .get<ProgramDetailType>(`/program/${programId}/detail`)
+            .then((res) => setData(res.data))
+            .catch(() => setError("Failed to load program details."))
+            .finally(() => setLoading(false));
+    };
 
     useEffect(() => {
-        if (!programId) return;
-        let cancelled = false;
-        const load = async () => {
-            setLoading(true);
-            setError(null);
-            try {
-                const res = await axiosPrivate.get<ProgramDetailType>(
-                    `/program/${programId}/detail`
-                );
-                if (!cancelled) setData(res.data);
-            } catch {
-                if (!cancelled) setError("Failed to load program details.");
-            } finally {
-                if (!cancelled) setLoading(false);
-            }
-        };
-        load();
-        return () => {
-            cancelled = true;
-        };
+        fetchProgram();
     }, [axiosPrivate, programId]);
 
     if (loading) {
@@ -176,15 +175,30 @@ export const ProgramDetail = () => {
             ) : (
                 <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
                     <div className="grid grid-cols-12 px-6 py-3 bg-slate-50 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                        <div className="col-span-4">User</div>
-                        <div className="col-span-5">Email</div>
+                        <div className="col-span-3">User</div>
+                        <div className="col-span-4">Email</div>
                         <div className="col-span-3">Roles</div>
+                        <div className="col-span-2 text-right">Actions</div>
                     </div>
                     {data.users.map((u) => (
-                        <UserRow key={u.id} user={u} />
+                        <UserRow
+                            key={u.id}
+                            user={u}
+                            canEdit={isAdmin && u.email?.toLowerCase() !== currentEmail}
+                            onEditRole={() => setEditingUser(u)}
+                        />
                     ))}
                 </div>
             )}
+
+            <EditRoleDialog
+                user={editingUser}
+                onClose={() => setEditingUser(null)}
+                onSuccess={() => {
+                    setEditingUser(null);
+                    fetchProgram();
+                }}
+            />
         </div>
     );
 };
@@ -217,13 +231,21 @@ const StatTile = ({
     </div>
 );
 
-const UserRow = ({ user }: { user: ProgramUser }) => (
-    <div className="grid grid-cols-12 px-6 py-3.5 border-b border-slate-50 last:border-0 hover:bg-slate-50/60 transition-colors text-sm">
-        <div className="col-span-4 flex items-center gap-2 min-w-0">
+const UserRow = ({
+    user,
+    canEdit,
+    onEditRole,
+}: {
+    user: ProgramUser;
+    canEdit: boolean;
+    onEditRole: () => void;
+}) => (
+    <div className="grid grid-cols-12 px-6 py-3.5 border-b border-slate-50 last:border-0 hover:bg-slate-50/60 transition-colors text-sm items-center">
+        <div className="col-span-3 flex items-center gap-2 min-w-0">
             <MdBadge size={16} className="text-slate-400 shrink-0" />
             <span className="font-medium text-slate-800 truncate">{user.username}</span>
         </div>
-        <div className="col-span-5 flex items-center gap-2 min-w-0">
+        <div className="col-span-4 flex items-center gap-2 min-w-0">
             <MdEmail size={16} className="text-slate-400 shrink-0" />
             <span className="text-slate-600 truncate">{user.email}</span>
         </div>
@@ -236,6 +258,33 @@ const UserRow = ({ user }: { user: ProgramUser }) => (
                     {r.replace("ROLE_", "")}
                 </span>
             ))}
+        </div>
+        <div className="col-span-2 flex justify-end">
+            <Tooltip
+                title={
+                    canEdit
+                        ? "Change role"
+                        : "Only admins can change roles, and not their own"
+                }
+            >
+                <span>
+                    <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={<MdEdit size={14} />}
+                        disabled={!canEdit}
+                        onClick={onEditRole}
+                        sx={{
+                            borderRadius: "0.5rem",
+                            textTransform: "none",
+                            fontWeight: 600,
+                            fontSize: "0.75rem",
+                        }}
+                    >
+                        Role
+                    </Button>
+                </span>
+            </Tooltip>
         </div>
     </div>
 );

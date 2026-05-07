@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import useAxiosPrivate from "../hooks/useAxiosPrivate";
+import useAuth from "../hooks/useAuth";
 import {
     Button,
     Card,
@@ -11,11 +12,13 @@ import {
     IconButton,
     MenuItem,
     TextField,
+    Tooltip,
     Typography,
     Skeleton,
 } from "@mui/material";
 import { DataGrid, type GridColDef } from "@mui/x-data-grid";
-import { MdAdd, MdClose, MdDeleteOutline, MdPeople } from "react-icons/md";
+import { MdAdd, MdClose, MdDeleteOutline, MdEdit, MdPeople } from "react-icons/md";
+import { EditRoleDialog, ROLES } from "./EditRoleDialog";
 
 type UserRow = { id: number; username: string; email: string; roles: string[] };
 
@@ -24,11 +27,14 @@ const CREATE_USERS_URL = "/admin/create-users";
 
 export const Users = () => {
     const axiosPrivate = useAxiosPrivate();
+    const { auth } = useAuth();
+    const currentEmail = auth?.email?.toLowerCase() ?? "";
     const [users, setUsers] = useState<UserRow[]>([]);
     const [search, setSearch] = useState("");
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [dialogOpen, setDialogOpen] = useState(false);
+    const [editingUser, setEditingUser] = useState<UserRow | null>(null);
 
     const fetchUsers = () => {
         setLoading(true);
@@ -60,6 +66,7 @@ export const Users = () => {
             username: u.username,
             email: u.email,
             roles: u.roles.map((r) => r.replace("ROLE_", "")).join(", "),
+            _raw: u,
         }));
     }, [users, search]);
 
@@ -89,8 +96,47 @@ export const Users = () => {
                     </div>
                 ),
             },
+            {
+                field: "actions",
+                headerName: "Actions",
+                width: 120,
+                sortable: false,
+                filterable: false,
+                disableColumnMenu: true,
+                renderCell: (params) => {
+                    const row = params.row as UserRow & { _raw: UserRow };
+                    const isSelf =
+                        !!currentEmail && row.email?.toLowerCase() === currentEmail;
+                    return (
+                        <Tooltip
+                            title={
+                                isSelf
+                                    ? "You cannot change your own role"
+                                    : "Change role"
+                            }
+                        >
+                            <span>
+                                <Button
+                                    size="small"
+                                    variant="outlined"
+                                    startIcon={<MdEdit size={16} />}
+                                    disabled={isSelf}
+                                    onClick={() => setEditingUser(row._raw)}
+                                    sx={{
+                                        borderRadius: "0.5rem",
+                                        textTransform: "none",
+                                        fontWeight: 600,
+                                    }}
+                                >
+                                    Role
+                                </Button>
+                            </span>
+                        </Tooltip>
+                    );
+                },
+            },
         ],
-        []
+        [currentEmail]
     );
 
     return (
@@ -180,20 +226,20 @@ export const Users = () => {
                     fetchUsers();
                 }}
             />
+
+            <EditRoleDialog
+                user={editingUser}
+                onClose={() => setEditingUser(null)}
+                onSuccess={() => {
+                    setEditingUser(null);
+                    fetchUsers();
+                }}
+            />
         </div>
     );
 };
 
 /* ── Create Users Dialog ─────────────────────────────────────────── */
-
-const ROLES = [
-    { value: "ROLE_FACULTY", label: "Faculty" },
-    { value: "ROLE_HOD", label: "HOD" },
-    { value: "ROLE_PRINCIPAL", label: "Principal" },
-    { value: "ROLE_NBA_COORDINATOR", label: "NBA Coordinator" },
-    { value: "ROLE_NBA_COORDINATOR_DEPT", label: "NBA Coordinator (Dept)" },
-    { value: "ROLE_ADMIN", label: "Admin" },
-];
 
 type UserEntry = { email: string; role: string };
 
@@ -376,5 +422,6 @@ const CreateUsersDialog = ({ open, onClose, onSuccess }: CreateUsersDialogProps)
         </Dialog>
     );
 };
+
 
 export default Users;

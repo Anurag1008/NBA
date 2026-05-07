@@ -20,7 +20,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -34,6 +36,7 @@ import com.portal.backend.entity.Programs;
 import com.portal.backend.entity.Roles;
 import com.portal.backend.entity.Users;
 import com.portal.backend.payload.request.AdminCreateUsersRequest;
+import com.portal.backend.payload.request.UpdateUserRoleRequest;
 import com.portal.backend.payload.response.AdminStatsResponse;
 import com.portal.backend.payload.response.MessageResponse;
 import com.portal.backend.repository.CoreDepartmentRepository;
@@ -101,6 +104,42 @@ public class AdminStatsController {
             userRepository.save(user);
         }
         return ResponseEntity.ok(new MessageResponse("Users registered successfully!"));
+    }
+
+    @PutMapping("/users/{userId}/role")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> updateUserRole(@PathVariable Long userId,
+                                            @RequestBody UpdateUserRoleRequest request) {
+        if (request == null || request.getRole() == null || request.getRole().isBlank()) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Error: Role is required."));
+        }
+        Users user = userRepository.findById(userId).orElse(null);
+        if (user == null) {
+            return ResponseEntity.status(404).body(new MessageResponse("User not found with id " + userId));
+        }
+        ERole eRole;
+        try {
+            String normalized = request.getRole().trim().toUpperCase().replace(' ', '_');
+            if (!normalized.startsWith("ROLE_")) normalized = "ROLE_" + normalized;
+            eRole = ERole.valueOf(normalized);
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest()
+                    .body(new MessageResponse("Error: Unknown role '" + request.getRole() + "'."));
+        }
+        Roles role = roleRepository.findByName(eRole)
+                .orElseThrow(() -> new RuntimeException("Error: Role not found."));
+        List<Roles> roles = new ArrayList<>();
+        roles.add(role);
+        user.setRoles(roles);
+        userRepository.save(user);
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("id", user.getId());
+        body.put("username", user.getUsername());
+        body.put("email", user.getEmail());
+        body.put("roles", List.of(eRole.name()));
+        body.put("message", "Role updated successfully");
+        return ResponseEntity.ok(body);
     }
 
     @GetMapping("/users")
