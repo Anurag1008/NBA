@@ -11,12 +11,21 @@ type NavItem = {
     roles: string[];
 };
 
+const ALL_ROLES = [
+    "ROLE_ADMIN",
+    "ROLE_PRINCIPAL",
+    "ROLE_NBA_COORDINATOR",
+    "ROLE_HOD",
+    "ROLE_NBA_COORDINATOR_DEPT",
+    "ROLE_FACULTY",
+];
+
 const navItems: NavItem[] = [
-    { icon: <MdDashboardCustomize size={22} />, text: "Dashboard", path: "/dashboard", roles: ["ROLE_ADMIN", "ROLE_FACULTY"] },
+    { icon: <MdDashboardCustomize size={22} />, text: "Dashboard", path: "/dashboard", roles: ALL_ROLES },
     { icon: <MdSchool size={22} />, text: "Institutes", path: "/institute", roles: ["ROLE_ADMIN"] },
     { icon: <MdPeople size={22} />, text: "Users", path: "/users", roles: ["ROLE_ADMIN"] },
-    { icon: <MdAssignment size={22} />, text: "Tasks", path: "/tasks", roles: ["ROLE_ADMIN", "ROLE_FACULTY"] },
-    { icon: <MdPerson size={22} />, text: "Profile", path: "/profile", roles: ["ROLE_ADMIN", "ROLE_FACULTY"] },
+    { icon: <MdAssignment size={22} />, text: "Tasks", path: "/tasks", roles: ALL_ROLES },
+    { icon: <MdPerson size={22} />, text: "Profile", path: "/profile", roles: ALL_ROLES },
 ];
 
 type SidebarProps = {

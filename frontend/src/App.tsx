@@ -23,7 +23,20 @@ function App() {
       <Route path="/unauthorized" element={<Unauthorized />} />
 
       {/* Routes accessible to all authenticated users */}
-      <Route element={<RequireAuth allowedRoles={["ROLE_ADMIN", "ROLE_FACULTY"]} />}>
+      <Route
+        element={
+          <RequireAuth
+            allowedRoles={[
+              "ROLE_ADMIN",
+              "ROLE_PRINCIPAL",
+              "ROLE_NBA_COORDINATOR",
+              "ROLE_HOD",
+              "ROLE_NBA_COORDINATOR_DEPT",
+              "ROLE_FACULTY",
+            ]}
+          />
+        }
+      >
         <Route path="/" element={<Home />}>
           <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />

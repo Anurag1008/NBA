@@ -25,6 +25,8 @@
 The NBA portal allows educational institutes to manage the NBA accreditation lifecycle:
 
 - Admins create and manage institutes, departments, and programs
+- Admins manage users — create with role + institute mapping, change roles inline (from the Users table or the Program detail page)
+- Any authenticated user maintains their own profile (personal details + qualifications) via `/profile`
 - Faculty are assigned NBA documentation files
 - Admins monitor portal-wide stats (institutes, departments, users)
 - Faculty see their own task/file assignment stats on the dashboard
@@ -116,14 +118,18 @@ NBA/
 /login                          → Login (public)
 /unauthorized                   → Unauthorized page (public)
 
-[Authenticated — ADMIN + FACULTY]
+[Authenticated — any role: ADMIN, PRINCIPAL, NBA_COORDINATOR,
+                            HOD, NBA_COORDINATOR_DEPT, FACULTY]
   /                             → redirects to /dashboard
-  /dashboard                    → Dashboard
+  /dashboard                    → Dashboard (admin shows stats; others show shell)
   /tasks                        → Tasks (file assignments)
-  /profile                      → User profile
+  /profile                      → User profile (details + qualifications)
 
 [Admin only]
   /institute                    → Institutes grid
+  /institute/:instituteId       → Institute detail
+  /department/:departmentId     → Department detail
+  /program/:programId           → Program detail (with inline role-change action)
   /users                        → User management
   /create-institute             → 3-step institute wizard
   /create-departments/:id       → Create departments (standalone)
@@ -156,14 +162,18 @@ Logout → POST /api/v1/auth/signout → deletes refresh token in DB
 | Component | Route | Role Access |
 |-----------|-------|-------------|
 | `Login` | `/login` | Public |
-| `Dashboard` | `/dashboard` | All |
+| `Dashboard` | `/dashboard` | All authenticated |
 | `Institute` | `/institute` | Admin |
+| `InstituteDetail` | `/institute/:id` | Admin |
+| `DepartmentDetail` | `/department/:id` | Admin |
+| `ProgramDetail` | `/program/:id` | Admin (inline role edit per user) |
 | `Users` | `/users` | Admin |
+| `EditRoleDialog` | shared | Admin (used by `Users` and `ProgramDetail`) |
 | `InstituteWizard` | `/create-institute` | Admin |
-| `Tasks` | `/tasks` | All |
-| `Profile` | `/profile` | All |
-| `Sidebar` | Layout | All |
-| `Home` | Layout shell | All |
+| `Tasks` | `/tasks` | All authenticated |
+| `Profile` | `/profile` | All authenticated |
+| `Sidebar` | Layout | All authenticated |
+| `Home` | Layout shell | All authenticated |
 
 ---
 
@@ -305,15 +315,31 @@ Request
 | nba_file_id | FK → nba_file | |
 
 #### `user_info`
+Shared primary-key 1:1 with `users` (id == users.id; no auto-generation).
+
 | Column | Type | Notes |
 |--------|------|-------|
-| id | BIGINT PK | |
-| first_name | VARCHAR | |
-| date_of_birth | DATE | |
-| date_of_joining | DATE | |
-| designation | VARCHAR | |
+| id | BIGINT PK | Same as users.id (manually assigned) |
+| first_name | VARCHAR | Not null |
+| date_of_birth | DATE | Not null |
+| date_of_joining | DATE | Not null |
+| designation | VARCHAR | Not null |
 | emp_code | VARCHAR | |
 | phone | VARCHAR | |
+| is_active | BOOLEAN | Not null, default true |
+| created_at | TIME | Set on construction |
+| user_id | FK → users | |
+
+#### `qualification`
+A user can have many qualifications (one row per degree).
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | BIGINT PK | Auto-generated (IDENTITY) |
+| degree_name | VARCHAR | Not null |
+| level | VARCHAR | UG / PG / PHD / Diploma |
+| year_of_completion | DATE | Not null |
+| university | VARCHAR | Not null |
 | user_id | FK → users | |
 
 ---
@@ -465,21 +491,126 @@ List all registered users with their roles.
 ---
 
 #### `POST /admin/create-users`
-Create one or more users with specified roles and default password `Default@123`.
+Create one or more users with specified roles and default password `Default@123`. Each row may optionally bind the user to an institute.
 
 **Request**
 ```json
 {
   "users": [
-    { "email": "alice@x.com", "role": "ROLE_FACULTY" },
-    { "email": "bob@x.com",   "role": "ROLE_HOD" }
+    { "email": "alice@x.com", "role": "ROLE_FACULTY", "instituteId": 1 },
+    { "email": "bob@x.com",   "role": "ROLE_HOD",     "instituteId": null }
   ]
 }
 ```
 **Role values:** `ROLE_ADMIN`, `ROLE_PRINCIPAL`, `ROLE_HOD`, `ROLE_NBA_COORDINATOR`, `ROLE_NBA_COORDINATOR_DEPT`, `ROLE_FACULTY`
 
+`instituteId` is optional — when provided, the new user is mapped to that institute. The `Users.tsx` create dialog fetches `/institute/show-institute` and renders the choices in a per-row dropdown.
+
 **Response** `200` `{ "message": "Users registered successfully!" }`
 **Response** `400` `{ "message": "Error: Email alice@x.com is already in use!" }`
+**Response** `400` `{ "message": "Error: Institute not found with id 99" }`
+
+---
+
+#### `PUT /admin/users/{userId}/role`
+Replace a user's role. Powers the "Change Role" action in the Users table and inline on the Program Detail page.
+
+**Request**
+```json
+{ "role": "ROLE_HOD" }
+```
+The `role` value is normalized — `HOD`, `hod`, `Hod`, and `ROLE_HOD` all resolve. Unknown values return `400`.
+
+**Response** `200`
+```json
+{
+  "id": 5,
+  "username": "alice",
+  "email": "alice@x.com",
+  "roles": ["ROLE_HOD"],
+  "message": "Role updated successfully"
+}
+```
+**Response** `404` if no user matches `userId`.
+
+The frontend prevents an admin from selecting their own row (button disabled with tooltip), but the backend does not enforce this — clients are trusted on this point.
+
+---
+
+### Current-User Profile — `/users/me`
+
+All endpoints require **any authenticated user**. Each user can only read and write their own profile and qualifications.
+
+#### `GET /users/me/details`
+Fetch the current user's profile (returns `null` for fields that haven't been filled in yet).
+
+**Response** `200`
+```json
+{
+  "username": "alice",
+  "email": "alice@x.com",
+  "firstName": "Alice",
+  "dateOfBirth": "1992-04-12",
+  "dateOfJoining": "2020-08-01",
+  "designation": "Assistant Professor",
+  "empCode": "EMP123",
+  "phone": "9876543210"
+}
+```
+
+#### `PUT /users/me/details`
+Upsert the current user's profile. The `UserInfo` row uses a shared primary key (id == users.id) so the first write seeds it, subsequent writes update it.
+
+**Request**
+```json
+{
+  "firstName": "Alice",
+  "date_of_birth": "1992-04-12",
+  "date_of_joining": "2020-08-01",
+  "designation": "Assistant Professor",
+  "emp_code": "EMP123",
+  "phone": "9876543210"
+}
+```
+Returns the same shape as `GET /users/me/details`.
+
+#### `GET /users/me/qualifications`
+List the current user's qualifications, ordered by completion year descending.
+
+**Response** `200`
+```json
+[
+  {
+    "id": 12,
+    "degreeName": "M.Tech CSE",
+    "level": "PG",
+    "yearOfCompletion": "2018-06-15",
+    "university": "IIT Bombay"
+  }
+]
+```
+
+#### `POST /users/me/qualifications`
+Add a qualification.
+
+**Request**
+```json
+{
+  "degreeName": "B.Tech CSE",
+  "level": "UG",
+  "yearOfCompletion": "2014-05-20",
+  "university": "Pune University"
+}
+```
+Returns the saved record (with auto-generated `id`).
+
+#### `PUT /users/me/qualifications/{id}`
+Update an existing qualification. Returns `404` unless the row both exists and belongs to the current user.
+
+#### `DELETE /users/me/qualifications/{id}`
+Delete an existing qualification. Same ownership check as the PUT.
+
+**Response** `200` `{ "message": "Qualification deleted." }`
 
 ---
 
@@ -614,19 +745,23 @@ Update profile details for the logged-in faculty. **Requires `ROLE_FACULTY`.**
 |------|-------|-------------|
 | `Login.tsx` | `/login` | Email + password login form |
 | `Home.tsx` | `/` | Layout shell — renders `<Sidebar>` + `<Outlet>` |
-| `Sidebar.tsx` | layout | Collapsible left nav; shows nav items filtered by role; handles logout (calls signout API) |
-| `Dashboard.tsx` | `/dashboard` | Admin: portal stats + institutes table. Faculty: file assignment stats (total/pending/completed/overdue) |
+| `Sidebar.tsx` | layout | Collapsible left nav; Dashboard / Tasks / Profile visible to all roles, Institutes / Users admin-only; Quick Actions block (admin only); handles logout via signout API |
+| `Dashboard.tsx` | `/dashboard` | Admin: gradient hero with date + CTAs, gradient stat cards (Institutes / Departments / Users), Quick Actions row (Create Institute, View Institutes, Manage Users), Catalog Uploads, Institutes directory. Faculty: file assignment stats (total / pending / completed / overdue) |
 | `Institute.tsx` | `/institute` | Searchable card grid of all institutes (admin only) |
+| `InstituteDetail.tsx` | `/institute/:id` | Per-institute detail with department list (admin only) |
+| `DepartmentDetail.tsx` | `/department/:id` | Per-department detail (admin only) |
+| `ProgramDetail.tsx` | `/program/:id` | Per-program detail; lists assigned users with an inline "Role" button per row that opens the shared `EditRoleDialog` (admin only) |
 | `InstituteWizard.tsx` | `/create-institute` | 3-step form wizard: Step 1 Create Institute → Step 2 Add Departments → Step 3 Add Programs |
 | `CreateDepartments.tsx` | `/create-departments/:id` | Standalone department creation for a given institute |
 | `CreateProgram.tsx` | `/create-program` | Standalone program creation |
-| `Users.tsx` | `/users` | Admin user list with searchable DataGrid + "Create Users" dialog (email + role per row) |
+| `Users.tsx` | `/users` | Admin user list (DataGrid with search). "Create Users" dialog has per-row Email / Role / Institute dropdown (institutes fetched from `/institute/show-institute`). Each row also has a "Role" action that opens the shared `EditRoleDialog`. Self-edit is disabled. |
+| `EditRoleDialog.tsx` | shared | Reusable dialog that calls `PUT /admin/users/{id}/role`. Accepts any `{ id, username, email, roles[] }` shape, so it works in both the Users table and the Program Detail user list. Exports the `ROLES` constant used by both flows. |
 | `Tasks.tsx` | `/tasks` | Faculty file assignments list with filter chips (All / Pending / Completed / Overdue) — API not yet implemented |
-| `Profile.tsx` | `/profile` | Displays logged-in user's email and roles |
+| `Profile.tsx` | `/profile` | Gradient hero (avatar, name, email, role), Personal Details section (`firstName`, designation, employee code, phone, DOB, joining date) with Edit Profile dialog, and Qualifications section with Add / Edit / Delete per row; level pills color-coded for UG / PG / PHD / Diploma. Backed by `/users/me/details` and `/users/me/qualifications`. |
 | `Unauthorized.tsx` | `/unauthorized` | Shown when a user accesses a route they don't have permission for |
 | `RequiredAuth.tsx` | — | Route guard HOC — checks auth roles, redirects to `/login` or `/unauthorized` |
 | `PersistLogin.tsx` | — | Attempts token refresh on page reload to restore session |
-| `types.tsx` | — | Shared TypeScript interfaces (`Institute`, etc.) |
+| `types.tsx` | — | Shared TypeScript interfaces (`Institute`, `ProgramUser`, `ProgramDetail`, etc.) |
 
 ### `src/components/cards/`
 | File | Purpose |
@@ -643,11 +778,13 @@ Update profile details for the logged-in faculty. **Requires `ROLE_FACULTY`.**
 | File | Base Path | Description |
 |------|-----------|-------------|
 | `AuthController.java` | `/auth` | Signin, signup, refresh token, signout, update user role, create multiple users |
-| `AdminStatsController.java` | `/admin` | Portal stats, list users, create users with role |
-| `InstituteController.java` | `/institute` | Create and list institutes |
+| `AdminStatsController.java` | `/admin` | Portal stats, list users, create users with role + optional institute mapping, role update (`PUT /admin/users/{id}/role`), bulk-upload via Excel |
+| `UserProfileController.java` | `/users/me` | Current-user profile (`GET/PUT /me/details`) and qualifications CRUD (`GET/POST /me/qualifications`, `PUT/DELETE /me/qualifications/{id}`); accessible to any authenticated user |
+| `InstituteController.java` | `/institute` | Create, list, and per-institute detail |
 | `DepartmentController.java` | `/department` | Create departments under an institute |
-| `ProgramController.java` | `/program` | Create programs under a department |
-| `FacultyController.java` | `/faculty` | My file assignment stats, update faculty profile details |
+| `ProgramController.java` | `/program` | Create programs under a department, plus program detail endpoint used by `ProgramDetail.tsx` |
+| `FacultyController.java` | `/faculty` | My file assignment stats; legacy `update-faculty-details` (use `/users/me/details` instead) |
+| `CoreCatalogController.java` | `/core` | Bulk Excel upload of core departments and programs (admin-only) |
 | `FileController.java` | — | Placeholder (not yet implemented) |
 | `NBACoordinatorController.java` | — | Placeholder (not yet implemented) |
 | `InitializeProgramFilesController.java` | — | Placeholder (not yet implemented) |
@@ -674,11 +811,14 @@ Update profile details for the logged-in faculty. **Requires `ROLE_FACULTY`.**
 |------|--------|-----------------|
 | `UserRepository` | `Users` | `findByEmail`, `existsByEmail`, `existsByUsername` |
 | `InstituteRepository` | `Institute` | `existsByName`, `existsByCode` |
-| `DepartmentRepository` | `Department` | `findByInstituteId` |
-| `ProgramRepository` | `Programs` | — |
+| `DepartmentRepository` | `Department` | `findByInstituteId`, `findByInstituteIdAndCodeIgnoreCase`, `findByInstituteIdAndNameIgnoreCase` |
+| `ProgramRepository` | `Programs` | `findByDepartmentIdAndCodeIgnoreCase`, `findByDepartmentIdAndNameIgnoreCase` |
+| `CoreDepartmentRepository` | `CoreDepartment` | Catalog dept lookup |
+| `CoreProgramRepository` | `CoreProgram` | Catalog program lookup |
 | `RoleRepository` | `Roles` | `findByName(ERole)` |
 | `RefreshTokenRepository` | `RefreshToken` | `findByToken`, `deleteByUser` |
-| `UserInfoRepository` | `UserInfo` | `findByUsers` |
+| `UserInfoRepository` | `UserInfo` | `findByUsersId`, `findByUsers` |
+| `QualificationRepository` | `Qualification` | `findByUsersIdOrderByYearOfCompletionDesc` |
 | `NbaFileAssignmentRepository` | `NbaFileAssignment` | `countByUsersEmail`, `countByUsersEmailAndStatus` |
 
 ### Security
@@ -698,7 +838,9 @@ Update profile details for the logged-in faculty. **Requires `ROLE_FACULTY`.**
 | `LoginRequest` | `POST /auth/signin` | `email`, `password` |
 | `SignupRequest` | `POST /auth/signup` | `username`, `email`, `password`, `role` |
 | `CreateMultipleUserRequest` | `POST /auth/create-Multiple-Users` | `user_email: List<String>` |
-| `AdminCreateUsersRequest` | `POST /admin/create-users` | `users: List<{email, role}>` |
+| `AdminCreateUsersRequest` | `POST /admin/create-users` | `users: List<{email, role, instituteId?}>` |
+| `UpdateUserRoleRequest` | `PUT /admin/users/{id}/role` | `role` |
+| `QualificationRequest` | `POST/PUT /users/me/qualifications` | `degreeName`, `level`, `yearOfCompletion`, `university` |
 | `UpdateUserRole` | `POST /auth/update-user-role` | `email`, `roles: Set<String>` |
 | `CreateInstituteRequest` | `POST /institute/create-institute` | `name`, `code`, address fields |
 | `CreateDepartmentRequest` | `POST /department/create-departments` | `instituteId`, `createDepartments: [{code, name}]` |
@@ -752,6 +894,9 @@ Users created via `POST /auth/signup` use the password provided in the request.
 
 - `FileController`, `NBACoordinatorController`, `InitializeProgramFilesController` are stubs — not yet implemented.
 - `Tasks.tsx` frontend uses a placeholder timeout; the backend task endpoints are not yet implemented.
-- The security config has some URL matchers with incorrect paths (e.g. `/api/faculty/**`) — these are non-functional; rely on `@PreAuthorize` for role enforcement.
+- The security config has some URL matchers with incorrect paths (e.g. `/api/faculty/**`) — these are non-functional; rely on `@PreAuthorize` for role enforcement. `/users/me/**` falls through to `anyRequest().authenticated()` and is gated by `@PreAuthorize("isAuthenticated()")` on each handler.
 - `@CrossOrigin(origins = "*")` on `AuthController` conflicts with `withCredentials: true` — admin/management endpoints have been moved to `/admin/**` to avoid this issue.
 - Node.js 20.17 is below Vite's minimum (20.19) — upgrade recommended.
+- `UserInfo.id` has no `@GeneratedValue` — `UserProfileController` sets `id = users.id` on first save (shared-PK 1:1 mapping). The legacy `FacultyController.updateUserDetails` does not do this and may fail on first save; prefer the `/users/me/details` endpoint.
+- `Qualification.id` is now `@GeneratedValue(IDENTITY)`; if a database existed before this change, run a migration to convert the column to identity (Hibernate `ddl-auto=update` will not retro-fit identity on an existing column).
+- The role-change endpoint (`PUT /admin/users/{id}/role`) does not block self-demotion server-side — the UI disables the "Role" button on the admin's own row, but a direct API call would still succeed.

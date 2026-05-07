@@ -93,6 +93,14 @@ public class AdminStatsController {
                 return ResponseEntity.badRequest()
                         .body(new MessageResponse("Error: Email " + email + " is already in use!"));
             }
+            Institute institute = null;
+            if (entry.getInstituteId() != null) {
+                institute = instituteRepository.findById(entry.getInstituteId()).orElse(null);
+                if (institute == null) {
+                    return ResponseEntity.badRequest()
+                            .body(new MessageResponse("Error: Institute not found with id " + entry.getInstituteId()));
+                }
+            }
             String username = uniqueUsername(email.split("@")[0]);
             Users user = new Users(username, email, encoder.encode("Default@123"));
             ERole eRole = resolveRole(entry.getRole());
@@ -101,6 +109,7 @@ public class AdminStatsController {
             List<Roles> roles = new ArrayList<>();
             roles.add(role);
             user.setRoles(roles);
+            if (institute != null) user.setInstitute(institute);
             userRepository.save(user);
         }
         return ResponseEntity.ok(new MessageResponse("Users registered successfully!"));

@@ -11,5 +11,6 @@ public class AdminCreateUsersRequest {
     public static class UserEntry {
         private String email;
         private String role;
+        private Long instituteId;
     }
 }

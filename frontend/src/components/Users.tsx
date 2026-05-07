@@ -21,9 +21,11 @@ import { MdAdd, MdClose, MdDeleteOutline, MdEdit, MdPeople } from "react-icons/m
 import { EditRoleDialog, ROLES } from "./EditRoleDialog";
 
 type UserRow = { id: number; username: string; email: string; roles: string[] };
+type InstituteOption = { id: number; name: string; code?: string };
 
 const USERS_URL = "/admin/users";
 const CREATE_USERS_URL = "/admin/create-users";
+const INSTITUTES_URL = "/institute/show-institute";
 
 export const Users = () => {
     const axiosPrivate = useAxiosPrivate();
@@ -241,7 +243,7 @@ export const Users = () => {
 
 /* ── Create Users Dialog ─────────────────────────────────────────── */
 
-type UserEntry = { email: string; role: string };
+type UserEntry = { email: string; role: string; instituteId: string };
 
 type CreateUsersDialogProps = {
     open: boolean;
@@ -249,7 +251,7 @@ type CreateUsersDialogProps = {
     onSuccess: () => void;
 };
 
-const emptyEntry = (): UserEntry => ({ email: "", role: "ROLE_FACULTY" });
+const emptyEntry = (): UserEntry => ({ email: "", role: "ROLE_FACULTY", instituteId: "" });
 
 const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
 
@@ -259,7 +261,31 @@ const CreateUsersDialog = ({ open, onClose, onSuccess }: CreateUsersDialogProps)
     const [submitting, setSubmitting] = useState(false);
     const [apiError, setApiError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
+    const [institutes, setInstitutes] = useState<InstituteOption[]>([]);
+    const [institutesLoading, setInstitutesLoading] = useState(false);
     const lastInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (!open) return;
+        let cancelled = false;
+        setInstitutesLoading(true);
+        axiosPrivate
+            .get(INSTITUTES_URL)
+            .then((res) => {
+                if (cancelled) return;
+                const data = Array.isArray(res.data) ? (res.data as InstituteOption[]) : [];
+                setInstitutes(data);
+            })
+            .catch(() => {
+                if (!cancelled) setInstitutes([]);
+            })
+            .finally(() => {
+                if (!cancelled) setInstitutesLoading(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [open, axiosPrivate]);
 
     const handleClose = () => {
         if (submitting) return;
@@ -289,7 +315,11 @@ const CreateUsersDialog = ({ open, onClose, onSuccess }: CreateUsersDialogProps)
         setSubmitting(true);
         try {
             await axiosPrivate.post(CREATE_USERS_URL, {
-                users: validEntries.map((e) => ({ email: e.email.trim(), role: e.role })),
+                users: validEntries.map((e) => ({
+                    email: e.email.trim(),
+                    role: e.role,
+                    instituteId: e.instituteId ? Number(e.instituteId) : null,
+                })),
             });
             setSuccess(true);
             setTimeout(onSuccess, 1200);
@@ -302,7 +332,7 @@ const CreateUsersDialog = ({ open, onClose, onSuccess }: CreateUsersDialogProps)
     };
 
     return (
-        <Dialog open={open} onClose={handleClose} fullWidth maxWidth="sm" PaperProps={{ sx: { borderRadius: "0.75rem" } }}>
+        <Dialog open={open} onClose={handleClose} fullWidth maxWidth="md" PaperProps={{ sx: { borderRadius: "0.75rem" } }}>
             <DialogTitle className="flex items-center justify-between pb-2">
                 <span className="font-bold text-slate-900">Create Users</span>
                 <IconButton size="small" onClick={handleClose} disabled={submitting}>
@@ -326,14 +356,15 @@ const CreateUsersDialog = ({ open, onClose, onSuccess }: CreateUsersDialogProps)
                 ) : (
                     <div className="space-y-3">
                         {/* Column headers */}
-                        <div className="grid grid-cols-[1fr_160px_36px] gap-2 px-1">
+                        <div className="grid grid-cols-[1fr_160px_180px_36px] gap-2 px-1">
                             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Email</span>
                             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Role</span>
+                            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Institute</span>
                             <span />
                         </div>
 
                         {entries.map((entry, idx) => (
-                            <div key={idx} className="grid grid-cols-[1fr_160px_36px] gap-2 items-start">
+                            <div key={idx} className="grid grid-cols-[1fr_160px_180px_36px] gap-2 items-start">
                                 <TextField
                                     inputRef={idx === entries.length - 1 ? lastInputRef : undefined}
                                     fullWidth
@@ -366,6 +397,32 @@ const CreateUsersDialog = ({ open, onClose, onSuccess }: CreateUsersDialogProps)
                                     {ROLES.map((r) => (
                                         <MenuItem key={r.value} value={r.value}>
                                             {r.label}
+                                        </MenuItem>
+                                    ))}
+                                </TextField>
+                                <TextField
+                                    select
+                                    fullWidth
+                                    size="small"
+                                    value={entry.instituteId}
+                                    onChange={(e) => updateEntry(idx, "instituteId", e.target.value)}
+                                    disabled={submitting || institutesLoading}
+                                    helperText={
+                                        institutesLoading
+                                            ? "Loading…"
+                                            : institutes.length === 0
+                                            ? "No institutes available"
+                                            : undefined
+                                    }
+                                    sx={{ "& .MuiOutlinedInput-root": { borderRadius: "0.5rem" } }}
+                                >
+                                    <MenuItem value="">
+                                        <em className="text-slate-400">None</em>
+                                    </MenuItem>
+                                    {institutes.map((inst) => (
+                                        <MenuItem key={inst.id} value={String(inst.id)}>
+                                            {inst.name}
+                                            {inst.code ? ` (${inst.code})` : ""}
                                         </MenuItem>
                                     ))}
                                 </TextField>
