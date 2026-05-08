@@ -14,6 +14,7 @@ import CreateDepartments from "./components/CreateDepartments";
 import { CreateProgram } from "./components/CreateProgram";
 import { Tasks } from "./components/Tasks";
 import { Users } from "./components/Users";
+import { PrincipalUsers } from "./components/PrincipalUsers";
 
 function App() {
   return (
@@ -42,6 +43,13 @@ function App() {
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="tasks" element={<Tasks />} />
           <Route path="profile" element={<Profile />} />
+        </Route>
+      </Route>
+
+      {/* Principal & NBA Coordinator routes */}
+      <Route element={<RequireAuth allowedRoles={["ROLE_PRINCIPAL", "ROLE_NBA_COORDINATOR"]} />}>
+        <Route path="/" element={<Home />}>
+          <Route path="principal/users" element={<PrincipalUsers />} />
         </Route>
       </Route>
 

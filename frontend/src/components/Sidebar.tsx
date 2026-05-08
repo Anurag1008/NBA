@@ -24,6 +24,7 @@ const navItems: NavItem[] = [
     { icon: <MdDashboardCustomize size={22} />, text: "Dashboard", path: "/dashboard", roles: ALL_ROLES },
     { icon: <MdSchool size={22} />, text: "Institutes", path: "/institute", roles: ["ROLE_ADMIN"] },
     { icon: <MdPeople size={22} />, text: "Users", path: "/users", roles: ["ROLE_ADMIN"] },
+    { icon: <MdPeople size={22} />, text: "Institute Users", path: "/principal/users", roles: ["ROLE_PRINCIPAL", "ROLE_NBA_COORDINATOR"] },
     { icon: <MdAssignment size={22} />, text: "Tasks", path: "/tasks", roles: ALL_ROLES },
     { icon: <MdPerson size={22} />, text: "Profile", path: "/profile", roles: ALL_ROLES },
 ];

@@ -426,11 +426,16 @@ export const Dashboard = () => {
             setLoading(true);
             setError(null);
             try {
-                const institutesRes = await axiosPrivate.get<Institute[]>(INSTITUTES_URL);
-                if (cancelled) return;
-                setInstitutes(Array.isArray(institutesRes.data) ? institutesRes.data : []);
-
                 if (isAdmin) {
+                    try {
+                        const institutesRes = await axiosPrivate.get<Institute[]>(INSTITUTES_URL);
+                        if (!cancelled) {
+                            setInstitutes(Array.isArray(institutesRes.data) ? institutesRes.data : []);
+                        }
+                    } catch {
+                        if (!cancelled) setInstitutes([]);
+                    }
+
                     try {
                         const statsRes = await axiosPrivate.get<AdminStats>(ADMIN_STATS_URL);
                         if (!cancelled) setStats(statsRes.data);
@@ -742,7 +747,8 @@ export const Dashboard = () => {
                 </div>
             )}
 
-            {/* Institutes table */}
+            {/* Institutes table — admin only */}
+            {isAdmin && (
             <Card className="rounded-2xl shadow-sm border border-slate-100 bg-white">
                 <CardContent className="p-6">
                     <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-5">
@@ -819,6 +825,7 @@ export const Dashboard = () => {
                     </div>
                 </CardContent>
             </Card>
+            )}
         </div>
     );
 };

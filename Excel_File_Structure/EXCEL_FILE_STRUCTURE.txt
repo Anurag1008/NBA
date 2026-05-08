@@ -1,0 +1,139 @@
+================================================================================
+EXCEL FILE STRUCTURE — BULK UPLOAD TEMPLATES
+================================================================================
+
+This document describes the exact Excel (.xlsx) file format expected by each
+bulk-upload endpoint in the NBA portal. All uploads share the same conventions:
+
+  - File type ........ .xlsx only (no .xls, no .csv)
+  - Sheet ............ Data is read from the FIRST sheet of the workbook
+  - Header row ....... Must be the first row; column names are case-insensitive
+  - Empty rows ....... Silently skipped
+  - Extra columns .... Ignored (unknown headers do not cause errors)
+  - Trimming ......... Leading/trailing whitespace is trimmed from every cell
+
+Each upload returns a per-row report with status = created / alreadyPresent /
+skipped, plus reason text on failures.
+
+
+================================================================================
+1) BULK USERS                              POST /api/v1/admin/users/bulk-upload
+================================================================================
+Form fields:  instituteId (required), file (required, .xlsx)
+Auth:         ROLE_ADMIN
+
+Columns
+-------
+  Header        Required   Type     Notes
+  ------------  ---------  -------  ---------------------------------------------
+  email         YES        text     Must be unique across the system
+  username      no         text     If blank, derived from the part before '@'
+  role          no         text     One of the role keys below; default ROLE_FACULTY
+  department    no         text     Code OR name; must already exist for institute
+  program       no         text     Code OR name under the row's department
+
+Allowed role values (case-insensitive; "ROLE_" prefix is optional):
+  ROLE_ADMIN, ROLE_PRINCIPAL, ROLE_NBA_COORDINATOR,
+  ROLE_HOD, ROLE_NBA_COORDINATOR_DEPT, ROLE_FACULTY
+
+Notes
+  - Default password assigned to every created user: Default@123
+  - 'department' / 'program' are matched against the institute selected via
+    instituteId; they are NOT the core_department / core_program catalog.
+  - If 'program' is given, 'department' MUST also be given on the same row.
+
+Dummy data (sheet 1)
+--------------------
+  email                       | username   | role                     | department | program
+  --------------------------- | ---------- | ------------------------ | ---------- | -------
+  ravi.kumar@example.edu      | ravi.k     | ROLE_FACULTY             | CSE        | B.Tech CSE
+  meera.iyer@example.edu      | meera.i    | ROLE_HOD                 | ECE        | B.Tech ECE
+  sanjay.rao@example.edu      |            | ROLE_NBA_COORDINATOR     |            |
+  priya.menon@example.edu     | priya.m    | ROLE_NBA_COORDINATOR_DEPT| MECH       | B.Tech MECH
+  arjun.singh@example.edu     | arjun.s    | ROLE_PRINCIPAL           |            |
+
+
+================================================================================
+2) CORE DEPARTMENTS                          POST /api/v1/core/departments/upload
+================================================================================
+Form fields:  file (required, .xlsx)
+Auth:         ROLE_ADMIN
+
+Columns
+-------
+  Header   Required   Type    Notes
+  -------  ---------  ------  -------------------------------------------------
+  name     YES        text    Display name of the department
+  code     YES        text    Short unique code; duplicates are skipped silently
+
+Dummy data (sheet 1)
+--------------------
+  name                                 | code
+  ------------------------------------ | -----
+  Computer Science and Engineering     | CSE
+  Electronics and Communication Engg.  | ECE
+  Mechanical Engineering               | MECH
+  Civil Engineering                    | CIVIL
+  Information Technology               | IT
+
+
+================================================================================
+3) CORE PROGRAMS                              POST /api/v1/core/programs/upload
+================================================================================
+Form fields:  file (required, .xlsx)
+Auth:         ROLE_ADMIN
+
+Columns
+-------
+  Header            Required   Type    Notes
+  ----------------  ---------  ------  -------------------------------------------
+  program_name      YES        text    Display name of the program
+  program_code      YES        text    Unique within its department
+  department_name   YES        text    Display name (for reference)
+  department_code   YES        text    MUST already exist in core_department
+
+Header aliases accepted:
+  program_name    | "program name"    | "programname"
+  program_code    | "program code"    | "programcode"
+  department_name | "department name" | "departmentname" | "department"
+  department_code | "department code" | "departmentcode"
+
+Notes
+  - Upload core departments BEFORE core programs (department_code is checked
+    against the core_department table; missing codes cause the row to be
+    skipped with a clear reason).
+  - Duplicate (program_code + department_code) pairs are skipped silently.
+
+Dummy data (sheet 1)
+--------------------
+  program_name        | program_code | department_name                       | department_code
+  ------------------- | ------------ | ------------------------------------- | ---------------
+  B.Tech CSE          | BT-CSE       | Computer Science and Engineering      | CSE
+  M.Tech CSE          | MT-CSE       | Computer Science and Engineering      | CSE
+  B.Tech ECE          | BT-ECE       | Electronics and Communication Engg.   | ECE
+  B.Tech Mechanical   | BT-MECH      | Mechanical Engineering                | MECH
+  B.Tech Civil        | BT-CIVIL    | Civil Engineering                     | CIVIL
+
+
+================================================================================
+RECOMMENDED UPLOAD ORDER
+================================================================================
+  1. Core Departments      (populates global catalog)
+  2. Core Programs         (depends on core departments)
+  3. Institute setup       (admin picks departments/programs from the catalog)
+  4. Bulk Users            (depends on the institute's departments & programs)
+
+
+================================================================================
+COMMON MISTAKES TO AVOID
+================================================================================
+  - Saving the file as .xls or .csv — only .xlsx is accepted.
+  - Adding a title row above the headers — row 1 MUST be the header row.
+  - Merged cells in the header row — they break column detection.
+  - Putting program names in the 'department' column for users — the matcher
+    looks up department first; if it doesn't match, the row is skipped.
+  - Uploading core programs before core departments — every row will be
+    skipped with "department_code '...' not in core_department".
+  - Using a department/program that exists only in the core catalog (not yet
+    added to the institute) when uploading users — the user matcher checks
+    the institute's own departments/programs, not the catalog.
